@@ -17,58 +17,61 @@ enum Colors
   MAGENTA
 };
 
-std::vector<std::string> lines = {""};
-int x, y;
-int maxY, maxX;
-
-int rowOffset = 0;
-int colOffset = 0;
-
-bool isChord = false;
-std::string chord = "";
-
-std::string message = "";
-
-bool inCmdMode = true;
-
-std::string fileName = "";
-
-bool unSavedChanges = false;
-
-void saveToFile(std::string fileName)
+struct Editor
 {
-  std::ofstream file(fileName);
+  std::vector<std::string> lines = {""};
+  int x, y;
+  int maxY, maxX;
 
-  for (int i = 0; i < lines.size(); i++)
+  int rowOffset = 0;
+  int colOffset = 0;
+
+  bool isChord = false;
+  std::string chord = "";
+
+  std::string message = "";
+
+  bool inCmdMode = true;
+
+  std::string fileName = "";
+
+  bool unSavedChanges = false;
+};
+
+void saveToFile(Editor &e)
+{
+  std::ofstream file(e.fileName);
+
+  for (int i = 0; i < e.lines.size(); i++)
   {
-    file << lines[i];
-    if (i < lines.size() - 1)
+    file << e.lines[i];
+    if (i < e.lines.size() - 1)
       file << std::endl;
   }
 
   file.close();
 
-  unSavedChanges = false;
+  e.unSavedChanges = false;
 }
 
-void refreshScreen()
+void refreshScreen(Editor &e)
 {
-  int maxLineNumberLength = std::to_string(lines.size()).size();
+  int maxLineNumberLength = std::to_string(e.lines.size()).size();
 
-  getmaxyx(stdscr, maxY, maxX);
-  maxY--;
+  getmaxyx(stdscr, e.maxY, e.maxX);
+  e.maxY--;
 
   std::string lineNumberString = "";
 
-  if (isChord)
+  if (e.isChord)
     goto chord;
 
   clear();
 
-  for (int i = 0; i < maxY; i++)
+  for (int i = 0; i < e.maxY; i++)
   {
-    if (i + rowOffset < lines.size())
-      lineNumberString += std::to_string(i + rowOffset + 1);
+    if (i + e.rowOffset < e.lines.size())
+      lineNumberString += std::to_string(i + e.rowOffset + 1);
     else
       for (int j = 0; j < maxLineNumberLength; j++)
         lineNumberString += " ";
@@ -82,45 +85,44 @@ void refreshScreen()
   attroff(COLOR_PAIR(CYAN));
   attroff(A_BOLD);
 
-  for (int i = rowOffset; i < std::min(maxY + rowOffset, (int)lines.size()); i++)
+  for (int i = e.rowOffset; i < std::min(e.maxY + e.rowOffset, (int)e.lines.size()); i++)
   {
-    std::string cutLine = lines[i].substr(std::min((int)lines[i].size(), colOffset), maxX - maxLineNumberLength - 1);
+    std::string cutLine = e.lines[i].substr(std::min((int)e.lines[i].size(), e.colOffset), e.maxX - maxLineNumberLength - 1);
 
-    int offseti = i - rowOffset;
+    int offseti = i - e.rowOffset;
 
     mvaddstr(offseti, maxLineNumberLength + 1, cutLine.c_str());
   }
 
-  if (message.size() == 0)
+  if (e.message.size() == 0)
   {
-    // message = fileName + " - " + std::to_string(lines.size()) + " lines";
-    message = fileName.substr(fileName.find_last_of("/") + 1, fileName.size() - fileName.find_last_of("/") - 1) + " - " + std::to_string(lines.size()) + " lines";
+    e.message = e.fileName.substr(e.fileName.find_last_of("/") + 1, e.fileName.size() - e.fileName.find_last_of("/") - 1) + " - " + std::to_string(e.lines.size()) + " lines";
 
-    if (unSavedChanges)
-      message += " (modified)";
+    if (e.unSavedChanges)
+      e.message += " (modified)";
   }
 
-  for (int i = 0; i < maxX; i++)
-    mvaddstr(maxY, i, " ");
+  for (int i = 0; i < e.maxX; i++)
+    mvaddstr(e.maxY, i, " ");
   attron(COLOR_PAIR(GREEN));
   attron(A_BOLD);
-  mvaddstr(maxY, 0, message.c_str());
+  mvaddstr(e.maxY, 0, e.message.c_str());
   attroff(COLOR_PAIR(GREEN));
   attroff(A_BOLD);
 
-  move(y - rowOffset, x + maxLineNumberLength + 1);
+  move(e.y - e.rowOffset, e.x + maxLineNumberLength + 1);
 
-  if (isChord)
+  if (e.isChord)
   {
   chord:
-    message = "";
+    e.message = "";
 
-    for (int i = 0; i < maxX; i++)
-      mvaddstr(maxY, i, " ");
+    for (int i = 0; i < e.maxX; i++)
+      mvaddstr(e.maxY, i, " ");
 
     attron(COLOR_PAIR(GREEN));
     attron(A_BOLD);
-    mvaddstr(maxY, 0, chord.c_str());
+    mvaddstr(e.maxY, 0, e.chord.c_str());
     attroff(COLOR_PAIR(GREEN));
     attroff(A_BOLD);
   }
@@ -130,26 +132,28 @@ void refreshScreen()
 
 int main(int argc, char **argv)
 {
+  Editor e;
+
   if (argc > 1)
   {
     std::ifstream file(argv[1]);
 
-    fileName = argv[1];
+    e.fileName = argv[1];
 
     if (file.is_open())
     {
-      lines.clear();
+      e.lines.clear();
       std::string line;
       while (std::getline(file, line))
       {
-        lines.push_back(line);
+        e.lines.push_back(line);
       }
 
       file.close();
     }
 
-    if (lines.size() == 0)
-      lines.push_back("");
+    if (e.lines.size() == 0)
+      e.lines.push_back("");
   }
   else
   {
@@ -172,7 +176,7 @@ int main(int argc, char **argv)
   init_pair(BLUE, COLOR_BLUE, COLOR_BLACK);
   init_pair(MAGENTA, COLOR_MAGENTA, COLOR_BLACK);
 
-  refreshScreen();
+  refreshScreen(e);
 
   while (true)
   {
@@ -180,66 +184,67 @@ int main(int argc, char **argv)
 
     int ch = getch();
 
-    if (isChord)
+    if (e.isChord)
     {
       if (ch == KEY_ENTER || ch == '\n')
       {
-        chord[0] = ':';
-        if (chord == ":q")
+        e.chord = e.chord.substr(1, e.chord.size() - 1);
+
+        if (e.chord == "q")
         {
           endwin();
           return 0;
         }
-        else if (chord == ":sq" || chord == ":wq")
+        else if (e.chord == "sq" || e.chord == "wq")
         {
-          saveToFile(fileName);
+          saveToFile(e);
           endwin();
           return 0;
         }
-        else if (chord == ":s" || chord == ":w")
+        else if (e.chord == "s" || e.chord == "w")
         {
-          saveToFile(fileName);
-          isChord = false;
+          saveToFile(e);
+          e.isChord = false;
         }
-        else if (chord == ":i")
+        else if (e.chord == "i")
         {
-          inCmdMode = false;
-          message = "INSERT - PRESS ESC TO EXIT";
+          e.inCmdMode = false;
+          e.message = "INSERT - PRESS ESC TO EXIT";
         }
-        else if (chord.substr(0, 3) == ":l ")
+        else if (e.chord.substr(0, 2) == "l ")
         {
-          std::string lineNumberString = chord.substr(3, chord.size() - 3);
+          std::string lineNumberString = e.chord.substr(3, e.chord.size() - 3);
 
           if (lineNumberString.size() == 0 || lineNumberString.find_first_not_of(" 0123456789") != std::string::npos)
             lineNumberString = "1";
 
-          int lineNumber = std::min(std::stoi(lineNumberString), (int)lines.size());
+          int lineNumber = std::min(std::stoi(lineNumberString), (int)e.lines.size());
 
           if (lineNumber > 0)
           {
-            y = lineNumber - 1;
-            x = 0;
-            rowOffset = std::max(0, y - getmaxy(stdscr) / 2);
+            e.y = lineNumber - 1;
+            e.x = 0;
+            e.rowOffset = std::max(0, e.y - getmaxy(stdscr) / 2);
           }
         }
-        else if (chord.substr(0, 3) == ":f ")
+        else if (e.chord.substr(0, 2) == "f ")
         {
-          std::string targetString = chord.substr(3, chord.size() - 3);
+          std::string targetString = e.chord.substr(3, e.chord.size() - 3);
 
           if (targetString.size() != 0)
           {
-            int lineNumber = y + 1;
+            int lineNumber = e.y + 1;
             int positionx = 0;
             bool found = false;
 
-            for (int i = 0; i < lines.size(); i++)
+            for (int i = 0; i < e.lines.size(); i++)
             {
-              int offsetI = (i + y) % lines.size();
+              int offsetI = (i + e.y) % e.lines.size();
 
-              if (lines[offsetI].find(targetString) != std::string::npos)
+              if (e.lines[offsetI].find(targetString) != std::string::npos)
               {
                 lineNumber = offsetI + 1;
-                positionx = lines[offsetI].find(targetString);
+                positionx = e.lines[offsetI].find(targetString);
                 found = true;
                 break;
               }
@@ -247,21 +252,21 @@ int main(int argc, char **argv)
 
             if (found)
             {
-              y = lineNumber - 1;
-              x = positionx;
-              rowOffset = std::max(0, y - getmaxy(stdscr) / 2);
+              e.y = lineNumber - 1;
+              e.x = positionx;
+              e.rowOffset = std::max(0, e.y - getmaxy(stdscr) / 2);
             }
             else
             {
-              message = "NOT FOUND";
+              e.message = "NOT FOUND";
             }
           }
         }
-        else if (chord.substr(0, 5) == ":swp ")
+        else if (e.chord.substr(0, 4) == "swp ")
         {
-          saveToFile(fileName);
+          saveToFile(e);
 
-          std::string newFileName = chord.substr(5, chord.size() - 5);
+          std::string newFileName = e.chord.substr(5, e.chord.size() - 5);
 
           if (newFileName.size() != 0)
           {
@@ -271,33 +276,33 @@ int main(int argc, char **argv)
 
             if (file.is_open())
             {
-              fileName = newFileName;
+              e.fileName = newFileName;
 
-              lines.clear();
+              e.lines.clear();
               std::string line;
               while (std::getline(file, line))
               {
-                lines.push_back(line);
+                e.lines.push_back(line);
               }
-              if (lines.size() == 0)
-                lines.push_back("");
+              if (e.lines.size() == 0)
+                e.lines.push_back("");
 
               file.close();
 
-              y = 0;
-              x = 0;
-              rowOffset = 0;
-              colOffset = 0;
+              e.y = 0;
+              e.x = 0;
+              e.rowOffset = 0;
+              e.colOffset = 0;
             }
             else
             {
-              message = "FILE NOT FOUND - USE :cswp TO CREATE NEW FILE";
+              e.message = "FILE NOT FOUND - USE :cswp TO CREATE NEW FILE";
             }
           }
         }
-        else if (chord.substr(0, 3) == ":c ")
+        else if (e.chord.substr(0, 2) == "c ")
         {
-          std::string newFileName = chord.substr(3, chord.size() - 3);
+          std::string newFileName = e.chord.substr(3, e.chord.size() - 3);
 
           if (newFileName.size() != 0)
           {
@@ -306,66 +311,66 @@ int main(int argc, char **argv)
           }
           else
           {
-            message = "NO FILE NAME";
+            e.message = "NO FILE NAME";
           }
         }
-        else if (chord.substr(0, 6) == ":cswp ")
+        else if (e.chord.substr(0, 5) == "cswp ")
         {
-          std::string newFileName = chord.substr(6, chord.size() - 6);
+          std::string newFileName = e.chord.substr(6, e.chord.size() - 6);
 
           if (newFileName.size() != 0)
           {
             std::ofstream ofile(newFileName);
             ofile.close();
 
-            fileName = newFileName.substr(0, newFileName.find_first_of(" "));
+            e.fileName = newFileName.substr(0, newFileName.find_first_of(" "));
 
-            std::ifstream file(fileName);
+            std::ifstream file(e.fileName);
 
-            lines.clear();
+            e.lines.clear();
             std::string line;
             while (std::getline(file, line))
             {
-              lines.push_back(line);
+              e.lines.push_back(line);
             }
-            if (lines.size() == 0)
-              lines.push_back("");
+            if (e.lines.size() == 0)
+              e.lines.push_back("");
 
             file.close();
 
-            y = 0;
-            x = 0;
-            rowOffset = 0;
-            colOffset = 0;
+            e.y = 0;
+            e.x = 0;
+            e.rowOffset = 0;
+            e.colOffset = 0;
           }
           else
           {
-            message = "NO FILE NAME";
+            e.message = "NO FILE NAME";
           }
         }
         else
         {
-          message = "UNKNOWN COMMAND";
+          e.message = "UNKNOWN COMMAND";
         }
 
-        chord = "";
-        isChord = false;
+        e.chord = "";
+        e.isChord = false;
       }
 
       if (ch != ERR && isprint(ch))
-        chord += ch;
+        e.chord += ch;
       else if (ch == KEY_BACKSPACE || ch == 127)
       {
-        if (chord.size() > 1)
-          chord = chord.substr(0, chord.size() - 1);
+        if (e.chord.size() > 1)
+          e.chord = e.chord.substr(0, e.chord.size() - 1);
         else
         {
-          chord = "";
-          isChord = false;
+          e.chord = "";
+          e.isChord = false;
         }
       }
 
-      refreshScreen();
+      refreshScreen(e);
       continue;
     }
 
@@ -373,175 +378,175 @@ int main(int argc, char **argv)
     {
     case KEY_UP:
       shouldRefresh = false;
-      if (y > 0)
+      if (e.y > 0)
       {
-        y--;
-        if (y < rowOffset)
+        e.y--;
+        if (e.y < e.rowOffset)
         {
-          rowOffset--;
+          e.rowOffset--;
           shouldRefresh = true;
         }
 
-        x = std::min(x, (int)lines[y].size());
+        e.x = std::min(e.x, (int)e.lines[e.y].size());
       }
       break;
 
     case KEY_DOWN:
       shouldRefresh = false;
-      if (y < lines.size() - 1)
+      if (e.y < e.lines.size() - 1)
       {
-        maxY = getmaxy(stdscr) + rowOffset - 1;
+        e.maxY = getmaxy(stdscr) + e.rowOffset - 1;
 
-        y++;
-        if (y >= maxY)
+        e.y++;
+        if (e.y >= e.maxY)
         {
-          rowOffset++;
+          e.rowOffset++;
           shouldRefresh = true;
         }
 
-        x = std::min(x, (int)lines[y].size());
+        e.x = std::min(e.x, (int)e.lines[e.y].size());
       }
       break;
 
     case KEY_LEFT:
       shouldRefresh = false;
-      if (x > 0)
+      if (e.x > 0)
       {
-        x--;
+        e.x--;
       }
-      else if (y > 0)
+      else if (e.y > 0)
       {
-        y--;
-        if (y < rowOffset)
+        e.y--;
+        if (e.y < e.rowOffset)
         {
-          rowOffset--;
+          e.rowOffset--;
           shouldRefresh = true;
         }
-        x = lines[y].size();
+        e.x = e.lines[e.y].size();
       }
       break;
 
     case KEY_RIGHT:
       shouldRefresh = false;
-      if (x < lines[y].size())
+      if (e.x < e.lines[e.y].size())
       {
-        x++;
-        maxX = getmaxx(stdscr);
+        e.x++;
+        e.maxX = getmaxx(stdscr);
       }
-      else if (y < lines.size() - 1)
+      else if (e.y < e.lines.size() - 1)
       {
-        maxY = getmaxy(stdscr) + rowOffset - 1;
+        e.maxY = getmaxy(stdscr) + e.rowOffset - 1;
 
-        y++;
-        if (y >= maxY)
+        e.y++;
+        if (e.y >= e.maxY)
         {
-          rowOffset++;
+          e.rowOffset++;
           shouldRefresh = true;
         }
 
-        x = 0;
+        e.x = 0;
       }
       break;
 
     case 127:
     case '\b':
     case KEY_BACKSPACE:
-      if (inCmdMode)
+      if (e.inCmdMode)
         break;
 
-      if (x > 0)
+      if (e.x > 0)
       {
-        lines[y].erase(x - 1, 1);
-        x--;
+        e.lines[e.y].erase(e.x - 1, 1);
+        e.x--;
 
-        unSavedChanges = true;
+        e.unSavedChanges = true;
       }
-      else if (y > 0)
+      else if (e.y > 0)
       {
-        x = lines[y - 1].size();
-        lines[y - 1] += lines[y];
-        lines.erase(lines.begin() + y);
-        y--;
+        e.x = e.lines[e.y - 1].size();
+        e.lines[e.y - 1] += e.lines[e.y];
+        e.lines.erase(e.lines.begin() + e.y);
+        e.y--;
 
-        if (y < rowOffset)
-          rowOffset--;
+        if (e.y < e.rowOffset)
+          e.rowOffset--;
 
-        unSavedChanges = true;
+        e.unSavedChanges = true;
       }
 
       break;
 
     case '\n':
     case KEY_ENTER:
-      if (inCmdMode)
+      if (e.inCmdMode)
         break;
 
-      unSavedChanges = true;
+      e.unSavedChanges = true;
 
-      lines.insert(lines.begin() + y + 1, lines[y].substr(x));
-      lines[y].erase(x);
+      e.lines.insert(e.lines.begin() + e.y + 1, e.lines[e.y].substr(e.x));
+      e.lines[e.y].erase(e.x);
 
-      y++;
-      if (y >= getmaxy(stdscr) + rowOffset - 1)
-        rowOffset++;
+      e.y++;
+      if (e.y >= getmaxy(stdscr) + e.rowOffset - 1)
+        e.rowOffset++;
 
-      x = 0;
+      e.x = 0;
       break;
 
     case '\t':
-      if (inCmdMode)
+      if (e.inCmdMode)
         break;
 
-      unSavedChanges = true;
+      e.unSavedChanges = true;
 
-      lines[y].insert(x, 4, ' ');
-      x += 4;
+      e.lines[e.y].insert(e.x, 4, ' ');
+      e.x += 4;
       break;
 
     case 27:
-      inCmdMode = true;
-      message = "";
+      e.inCmdMode = true;
+      e.message = "";
       break;
 
     case ':':
     case ';':
-      if (inCmdMode)
+      if (e.inCmdMode)
       {
-        isChord = true;
-        chord = ch;
+        e.isChord = true;
+        e.chord = ch;
         break;
       }
 
     case 'i':
-      if (inCmdMode)
+      if (e.inCmdMode)
       {
-        inCmdMode = false;
-        message = "INSERT - PRESS ESC TO EXIT";
+        e.inCmdMode = false;
+        e.message = "INSERT - PRESS ESC TO EXIT";
         break;
       }
 
     default:
-      if (inCmdMode)
+      if (e.inCmdMode)
         break;
 
       if (ch != ERR && isprint(ch))
       {
-        lines[y].insert(x, 1, ch);
-        x++;
+        e.lines[e.y].insert(e.x, 1, ch);
+        e.x++;
 
-        unSavedChanges = true;
+        e.unSavedChanges = true;
       }
       break;
     }
 
     if (shouldRefresh)
     {
-      refreshScreen();
+      refreshScreen(e);
     }
     else
     {
-      int maxLineNumberLength = std::to_string(lines.size()).size();
-      move(y - rowOffset, x + maxLineNumberLength + 1);
+      int maxLineNumberLength = std::to_string(e.lines.size()).size();
+      move(e.y - e.rowOffset, e.x + maxLineNumberLength + 1);
     }
   }
 
