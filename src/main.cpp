@@ -35,8 +35,58 @@ struct Editor
 
   std::string fileName = "";
 
+  bool isCFile = false;
+
   bool unSavedChanges = false;
 };
+
+struct HighlightData
+{
+  int lineNumber;
+  int position;
+  int length;
+};
+
+const std::string KEYWORDS[] = {
+    "auto",
+    "bool",
+    "break",
+    "case",
+    "char",
+    "class",
+    "const",
+    "continue",
+    "default",
+    "do",
+    "double",
+    "else",
+    "enum",
+    "extern",
+    "float",
+    "for",
+    "goto",
+    "if",
+    "inline",
+    "int",
+    "long",
+    "namespace",
+    "private",
+    "public",
+    "register",
+    "restrict",
+    "return",
+    "short",
+    "signed",
+    "sizeof",
+    "static",
+    "struct",
+    "switch",
+    "typedef",
+    "union",
+    "unsigned",
+    "void",
+    "volatile",
+    "while"};
 
 void saveToFile(Editor &e)
 {
@@ -63,68 +113,234 @@ void refreshScreen(Editor &e)
 
   std::string lineNumberString = "";
 
-  if (e.isChord)
-    goto chord;
+  std::vector<HighlightData> directiveHighlights = {};
+  std::vector<HighlightData> commentHighlights = {};
+  std::vector<HighlightData> stringHighlights = {};
+  std::vector<HighlightData> keywordHighlights = {};
+  std::vector<HighlightData> numberHighlights = {};
 
-  clear();
-
-  for (int i = 0; i < e.maxY; i++)
+  if (e.isCFile)
   {
-    if (i + e.rowOffset < e.lines.size())
-      lineNumberString += std::to_string(i + e.rowOffset + 1);
-    else
-      for (int j = 0; j < maxLineNumberLength; j++)
-        lineNumberString += " ";
+    bool inMultilineComment = false;
 
-    lineNumberString += "\n";
+    for (int i = e.rowOffset; i < std::min(e.maxY + e.rowOffset, (int)e.lines.size()); i++)
+    {
+      std::string lineWithoutStrings = e.lines[i];
+
+      int stringStart = lineWithoutStrings.find("\"");
+      while (stringStart != std::string::npos)
+      {
+        int stringEnd = lineWithoutStrings.find("\"", stringStart + 1);
+
+        if (!inMultilineComment)
+          stringHighlights.push_back({i, stringStart, stringEnd - stringStart + 1});
+
+        if (stringEnd == std::string::npos)
+          break;
+
+        for (int j = stringStart; j < stringEnd; j++)
+          lineWithoutStrings[j] = ' ';
+
+        stringStart = lineWithoutStrings.find("\"", stringEnd + 1);
+      }
+
+      if (inMultilineComment)
+      {
+        int multilineCommentEnd = e.lines[i].find("*/");
+
+        if (multilineCommentEnd != std::string::npos)
+        {
+          inMultilineComment = false;
+          commentHighlights.push_back({i, 0, multilineCommentEnd + 2});
+        }
+        else
+        {
+          commentHighlights.push_back({i, 0, (int)e.lines[i].size()});
+        }
+      }
+      else // Not in multiline comment
+      {
+        int multilineCommentStart = lineWithoutStrings.find("/*");
+
+        if (multilineCommentStart != std::string::npos)
+        {
+          inMultilineComment = true;
+          commentHighlights.push_back({i, multilineCommentStart, (int)e.lines[i].size() - multilineCommentStart});
+        }
+
+        if (inMultilineComment)
+          continue;
+
+        int commentStart = lineWithoutStrings.find("//");
+
+        if (commentStart != std::string::npos)
+        {
+          commentHighlights.push_back({i, commentStart, (int)e.lines[i].size() - commentStart});
+        }
+
+        if (e.lines[i][0] == '#')
+        {
+          directiveHighlights.push_back({i, 0, (int)e.lines[i].size()});
+
+          if (e.lines[i].substr(0, 8) == "#include")
+            stringHighlights.push_back({i, 8, (int)e.lines[i].size() - 8});
+        }
+        else
+        {
+          int angleBracketStart = lineWithoutStrings.find("<");
+
+          while (angleBracketStart != std::string::npos)
+          {
+            int angleBracketEnd = lineWithoutStrings.find(">", angleBracketStart + 1);
+
+            if (angleBracketEnd == std::string::npos)
+              break;
+
+            keywordHighlights.push_back({i, angleBracketStart, angleBracketEnd - angleBracketStart + 1});
+
+            angleBracketStart = lineWithoutStrings.find("<", angleBracketEnd + 1);
+          }
+        }
+
+        for (int j = 0; j < sizeof(KEYWORDS) / sizeof(KEYWORDS[0]); j++)
+        {
+          int keywordStart = lineWithoutStrings.find(KEYWORDS[j]);
+
+          while (keywordStart != std::string::npos)
+          {
+            if (keywordStart == 0 || !isalnum(lineWithoutStrings[keywordStart - 1]))
+            {
+              if (keywordStart + KEYWORDS[j].size() == lineWithoutStrings.size() || !isalnum(lineWithoutStrings[keywordStart + KEYWORDS[j].size()]))
+              {
+                keywordHighlights.push_back({i, keywordStart, (int)KEYWORDS[j].size()});
+              }
+            }
+
+            keywordStart = lineWithoutStrings.find(KEYWORDS[j], keywordStart + 1);
+          }
+        }
+
+        int numberStart = lineWithoutStrings.find_first_of("0123456789");
+
+        while (numberStart != std::string::npos)
+        {
+          int numberEnd = lineWithoutStrings.find_first_not_of("0123456789", numberStart);
+
+          numberHighlights.push_back({i, numberStart, numberEnd - numberStart});
+
+          numberStart = lineWithoutStrings.find_first_of("0123456789", numberEnd);
+        }
+      }
+    }
   }
 
-  attron(COLOR_PAIR(CYAN));
-  attron(A_BOLD);
-  mvaddstr(0, 0, lineNumberString.c_str());
-  attroff(COLOR_PAIR(CYAN));
-  attroff(A_BOLD);
-
-  for (int i = e.rowOffset; i < std::min(e.maxY + e.rowOffset, (int)e.lines.size()); i++)
+  if (!e.isChord)
   {
-    std::string cutLine = e.lines[i].substr(std::min((int)e.lines[i].size(), e.colOffset), e.maxX - maxLineNumberLength - 1);
+    clear();
 
-    int offseti = i - e.rowOffset;
+    for (int i = 0; i < e.maxY; i++)
+    {
+      if (i + e.rowOffset < e.lines.size())
+        lineNumberString += std::to_string(i + e.rowOffset + 1);
+      else
+        for (int j = 0; j < maxLineNumberLength; j++)
+          lineNumberString += " ";
 
-    mvaddstr(offseti, maxLineNumberLength + 1, cutLine.c_str());
+      lineNumberString += "\n";
+    }
+
+    attron(COLOR_PAIR(CYAN) | A_BOLD);
+    mvaddstr(0, 0, lineNumberString.c_str());
+    attroff(COLOR_PAIR(CYAN) | A_BOLD);
+
+    for (int i = e.rowOffset; i < std::min(e.maxY + e.rowOffset, (int)e.lines.size()); i++)
+    {
+      std::string cutLine = e.lines[i].substr(std::min((int)e.lines[i].size(), e.colOffset), e.maxX - maxLineNumberLength - 1);
+
+      int offseti = i - e.rowOffset;
+
+      mvaddstr(offseti, maxLineNumberLength + 1, cutLine.c_str());
+
+      if (e.isCFile)
+      {
+        for (int j = 0; j < directiveHighlights.size(); j++)
+        {
+          if (directiveHighlights[j].lineNumber == i)
+          {
+            attron(COLOR_PAIR(RED) | A_BOLD);
+            mvaddstr(offseti, maxLineNumberLength + 1 + directiveHighlights[j].position, e.lines[i].substr(directiveHighlights[j].position, directiveHighlights[j].length).c_str());
+            attroff(COLOR_PAIR(RED) | A_BOLD);
+          }
+        }
+
+        for (int j = 0; j < commentHighlights.size(); j++)
+        {
+          if (commentHighlights[j].lineNumber == i)
+          {
+            attron(COLOR_PAIR(CYAN));
+            mvaddstr(offseti, maxLineNumberLength + 1 + commentHighlights[j].position, e.lines[i].substr(commentHighlights[j].position, commentHighlights[j].length).c_str());
+            attroff(COLOR_PAIR(CYAN));
+          }
+        }
+
+        for (int j = 0; j < stringHighlights.size(); j++)
+        {
+          if (stringHighlights[j].lineNumber == i)
+          {
+            attron(COLOR_PAIR(GREEN));
+            mvaddstr(offseti, maxLineNumberLength + 1 + stringHighlights[j].position, e.lines[i].substr(stringHighlights[j].position, stringHighlights[j].length).c_str());
+            attroff(COLOR_PAIR(GREEN));
+          }
+        }
+
+        for (int j = 0; j < keywordHighlights.size(); j++)
+        {
+          if (keywordHighlights[j].lineNumber == i)
+          {
+            attron(COLOR_PAIR(YELLOW) | A_BOLD);
+            mvaddstr(offseti, maxLineNumberLength + 1 + keywordHighlights[j].position, e.lines[i].substr(keywordHighlights[j].position, keywordHighlights[j].length).c_str());
+            attroff(COLOR_PAIR(YELLOW) | A_BOLD);
+          }
+        }
+
+        for (int j = 0; j < numberHighlights.size(); j++)
+        {
+          if (numberHighlights[j].lineNumber == i)
+          {
+            attron(COLOR_PAIR(MAGENTA) | A_BOLD);
+            mvaddstr(offseti, maxLineNumberLength + 1 + numberHighlights[j].position, e.lines[i].substr(numberHighlights[j].position, numberHighlights[j].length).c_str());
+            attroff(COLOR_PAIR(MAGENTA) | A_BOLD);
+          }
+        }
+      }
+    }
+
+    if (e.message.size() == 0)
+    {
+      e.message = e.fileName.substr(e.fileName.find_last_of("/") + 1, e.fileName.size() - e.fileName.find_last_of("/") - 1) + " - " + std::to_string(e.lines.size()) + " lines";
+
+      if (e.unSavedChanges)
+        e.message += " (modified)";
+    }
+
+    for (int i = 0; i < e.maxX; i++)
+      mvaddstr(e.maxY, i, " ");
+    attron(COLOR_PAIR(GREEN) | A_BOLD);
+    mvaddstr(e.maxY, 0, e.message.c_str());
+    attroff(COLOR_PAIR(GREEN) | A_BOLD);
+
+    move(e.y - e.rowOffset, e.x + maxLineNumberLength + 1);
   }
-
-  if (e.message.size() == 0)
+  else
   {
-    e.message = e.fileName.substr(e.fileName.find_last_of("/") + 1, e.fileName.size() - e.fileName.find_last_of("/") - 1) + " - " + std::to_string(e.lines.size()) + " lines";
-
-    if (e.unSavedChanges)
-      e.message += " (modified)";
-  }
-
-  for (int i = 0; i < e.maxX; i++)
-    mvaddstr(e.maxY, i, " ");
-  attron(COLOR_PAIR(GREEN));
-  attron(A_BOLD);
-  mvaddstr(e.maxY, 0, e.message.c_str());
-  attroff(COLOR_PAIR(GREEN));
-  attroff(A_BOLD);
-
-  move(e.y - e.rowOffset, e.x + maxLineNumberLength + 1);
-
-  if (e.isChord)
-  {
-  chord:
     e.message = "";
 
     for (int i = 0; i < e.maxX; i++)
       mvaddstr(e.maxY, i, " ");
 
-    attron(COLOR_PAIR(GREEN));
-    attron(A_BOLD);
+    attron(COLOR_PAIR(GREEN) | A_BOLD);
     mvaddstr(e.maxY, 0, e.chord.c_str());
-    attroff(COLOR_PAIR(GREEN));
-    attroff(A_BOLD);
+    attroff(COLOR_PAIR(GREEN) | A_BOLD);
   }
 
   refresh();
@@ -139,6 +355,11 @@ int main(int argc, char **argv)
     std::ifstream file(argv[1]);
 
     e.fileName = argv[1];
+
+    std::string fileExtension = e.fileName.substr(e.fileName.find_last_of(".") + 1, e.fileName.size() - e.fileName.find_last_of(".") - 1);
+
+    if (fileExtension == "c" || fileExtension == "cpp" || fileExtension == "h" || fileExtension == "hpp")
+      e.isCFile = true;
 
     if (file.is_open())
     {
@@ -213,7 +434,7 @@ int main(int argc, char **argv)
         }
         else if (e.chord.substr(0, 2) == "l ")
         {
-          std::string lineNumberString = e.chord.substr(3, e.chord.size() - 3);
+          std::string lineNumberString = e.chord.substr(2, e.chord.size() - 2);
 
           if (lineNumberString.size() == 0 || lineNumberString.find_first_not_of(" 0123456789") != std::string::npos)
             lineNumberString = "1";
@@ -229,7 +450,7 @@ int main(int argc, char **argv)
         }
         else if (e.chord.substr(0, 2) == "f ")
         {
-          std::string targetString = e.chord.substr(3, e.chord.size() - 3);
+          std::string targetString = e.chord.substr(2, e.chord.size() - 2);
 
           if (targetString.size() != 0)
           {
@@ -266,7 +487,7 @@ int main(int argc, char **argv)
         {
           saveToFile(e);
 
-          std::string newFileName = e.chord.substr(5, e.chord.size() - 5);
+          std::string newFileName = e.chord.substr(4, e.chord.size() - 4);
 
           if (newFileName.size() != 0)
           {
@@ -302,7 +523,7 @@ int main(int argc, char **argv)
         }
         else if (e.chord.substr(0, 2) == "c ")
         {
-          std::string newFileName = e.chord.substr(3, e.chord.size() - 3);
+          std::string newFileName = e.chord.substr(2, e.chord.size() - 2);
 
           if (newFileName.size() != 0)
           {
@@ -316,7 +537,7 @@ int main(int argc, char **argv)
         }
         else if (e.chord.substr(0, 5) == "cswp ")
         {
-          std::string newFileName = e.chord.substr(6, e.chord.size() - 6);
+          std::string newFileName = e.chord.substr(5, e.chord.size() - 5);
 
           if (newFileName.size() != 0)
           {
