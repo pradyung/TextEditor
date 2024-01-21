@@ -16,7 +16,8 @@ enum Colors
   GREEN,
   YELLOW,
   BLUE,
-  MAGENTA
+  MAGENTA,
+  CYAN_BACK,
 };
 
 enum Highlights
@@ -31,6 +32,7 @@ enum Highlights
   BRACKET_LEVEL_1 = COLOR_PAIR(RED),
   BRACKET_LEVEL_2 = COLOR_PAIR(BLUE),
   BRACKET_LEVEL_3 = COLOR_PAIR(GREEN),
+  FIND = COLOR_PAIR(CYAN_BACK)
 };
 
 int BRACKET_HIGHLIGHTS[] = {
@@ -38,14 +40,18 @@ int BRACKET_HIGHLIGHTS[] = {
     BRACKET_LEVEL_2,
     BRACKET_LEVEL_3};
 
+struct HighlightData
+{
+  int lineNumber;
+  int position;
+  int length;
+  Highlights color;
+};
+
 struct Editor
 {
   std::vector<std::string> lines = {""};
-  int x, y;
-  int maxY, maxX;
-
-  int rowOffset = 0;
-  int colOffset = 0;
+  int x = 0, y = 0, maxY = 0, maxX = 0, rowOffset = 0, colOffset = 0;
 
   bool isChord = false;
   std::string chord = "";
@@ -59,14 +65,9 @@ struct Editor
   bool isCFile = false;
 
   bool unSavedChanges = false;
-};
 
-struct HighlightData
-{
-  int lineNumber;
-  int position;
-  int length;
-  Highlights color;
+  HighlightData findHighlight;
+  bool isFindHighlight = false;
 };
 
 const std::string KEYWORDS[] = {
@@ -324,6 +325,17 @@ void refreshScreen(Editor &e)
       }
     }
 
+    if (e.isFindHighlight)
+    {
+      attron(e.findHighlight.color);
+      mvaddstr(e.findHighlight.lineNumber - e.rowOffset,
+               maxLineNumberLength + 1 + e.findHighlight.position,
+               cut(e.lines[e.findHighlight.lineNumber].substr(e.findHighlight.position, e.findHighlight.length), e.findHighlight.position));
+      attroff(e.findHighlight.color);
+
+      e.isFindHighlight = false;
+    }
+
     if (e.message.size() == 0)
     {
       e.message = e.fileName.substr(e.fileName.find_last_of("/") + 1, e.fileName.size() - e.fileName.find_last_of("/") - 1) + " - " + std::to_string(e.lines.size()) + " lines";
@@ -405,6 +417,7 @@ int main(int argc, char **argv)
   init_pair(YELLOW, COLOR_YELLOW, COLOR_BLACK);
   init_pair(BLUE, COLOR_BLUE, COLOR_BLACK);
   init_pair(MAGENTA, COLOR_MAGENTA, COLOR_BLACK);
+  init_pair(CYAN_BACK, COLOR_BLACK, COLOR_CYAN);
 
   refreshScreen(e);
 
@@ -485,7 +498,12 @@ int main(int argc, char **argv)
             {
               e.y = lineNumber - 1;
               e.x = positionx;
-              e.rowOffset = std::max(0, e.y - getmaxy(stdscr) / 2);
+
+              if (e.y < e.rowOffset || e.y >= e.rowOffset + getmaxy(stdscr))
+                e.rowOffset = std::max(0, e.y - getmaxy(stdscr) / 2);
+
+              e.isFindHighlight = true;
+              e.findHighlight = {e.y, e.x, (int)targetString.size(), FIND};
             }
             else
             {
