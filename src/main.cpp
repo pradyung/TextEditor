@@ -8,20 +8,6 @@
 
 #define cut(str, position) str.substr(std::min((int)str.size(), e.colOffset), e.maxX - maxLineNumberLength - 1 - position).c_str()
 
-#define drawHighlights(highlights, color)                                                    \
-  for (int j = 0; j < highlights.size(); j++)                                                \
-  {                                                                                          \
-    if (highlights[j].lineNumber == i)                                                       \
-    {                                                                                        \
-      attron(color);                                                                         \
-      mvaddstr(                                                                              \
-          offseti,                                                                           \
-          maxLineNumberLength + 1 + highlights[j].position,                                  \
-          cut(highlights, e.lines[i].substr(highlights[j].position, highlights[j].length))); \
-      attroff(color);                                                                        \
-    }                                                                                        \
-  }
-
 enum Colors
 {
   WHITE,
@@ -35,12 +21,22 @@ enum Colors
 
 enum Highlights
 {
-  DIRECTIVE = COLOR_PAIR(RED) | A_BOLD,
+  LINE_NUMBER = COLOR_PAIR(CYAN) | A_BOLD,
+  MESSAGE = COLOR_PAIR(GREEN) | A_BOLD,
+  DIRECTIVE = COLOR_PAIR(RED),
   STRING = COLOR_PAIR(GREEN),
-  KEYWORD = COLOR_PAIR(YELLOW) | A_BOLD,
-  NUMBER = COLOR_PAIR(MAGENTA) | A_BOLD,
-  COMMENT = COLOR_PAIR(CYAN)
+  KEYWORD = COLOR_PAIR(YELLOW),
+  NUMBER = COLOR_PAIR(MAGENTA),
+  COMMENT = COLOR_PAIR(CYAN),
+  BRACKET_LEVEL_1 = COLOR_PAIR(RED),
+  BRACKET_LEVEL_2 = COLOR_PAIR(BLUE),
+  BRACKET_LEVEL_3 = COLOR_PAIR(GREEN),
 };
+
+int BRACKET_HIGHLIGHTS[] = {
+    BRACKET_LEVEL_1,
+    BRACKET_LEVEL_2,
+    BRACKET_LEVEL_3};
 
 struct Editor
 {
@@ -147,7 +143,9 @@ void refreshScreen(Editor &e)
     {
       bool inMultilineComment = false;
 
-      for (int i = e.rowOffset; i < std::min(e.maxY + e.rowOffset, (int)e.lines.size()); i++)
+      int bracketLevel = 0;
+
+      for (int i = 0; i < std::min(e.maxY + e.rowOffset, (int)e.lines.size()); i++)
       {
         std::string lineWithoutStrings = e.lines[i];
 
@@ -265,6 +263,25 @@ void refreshScreen(Editor &e)
 
             numberStart = lineWithoutStrings.find_first_of("0123456789", numberEnd);
           }
+
+          for (int j = 0; j < lineWithoutStrings.size(); j++)
+          {
+            switch (lineWithoutStrings[j])
+            {
+            case '(':
+            case '[':
+            case '{':
+              bracketLevel++;
+              highlights.push_back({i, j, 1, (Highlights)BRACKET_HIGHLIGHTS[bracketLevel % 3]});
+              break;
+            case ')':
+            case ']':
+            case '}':
+              highlights.push_back({i, j, 1, (Highlights)BRACKET_HIGHLIGHTS[bracketLevel % 3]});
+              bracketLevel--;
+              break;
+            }
+          }
         }
       }
     }
@@ -282,9 +299,9 @@ void refreshScreen(Editor &e)
       lineNumberString += "\n";
     }
 
-    attron(COLOR_PAIR(CYAN) | A_BOLD);
+    attron(LINE_NUMBER);
     mvaddstr(0, 0, lineNumberString.c_str());
-    attroff(COLOR_PAIR(CYAN) | A_BOLD);
+    attroff(LINE_NUMBER);
 
     for (int i = e.rowOffset; i < std::min(e.maxY + e.rowOffset, (int)e.lines.size()); i++)
     {
@@ -317,9 +334,9 @@ void refreshScreen(Editor &e)
 
     for (int i = 0; i < e.maxX; i++)
       mvaddstr(e.maxY, i, " ");
-    attron(COLOR_PAIR(GREEN) | A_BOLD);
+    attron(MESSAGE);
     mvaddstr(e.maxY, 0, e.message.c_str());
-    attroff(COLOR_PAIR(GREEN) | A_BOLD);
+    attroff(MESSAGE);
 
     move(e.y - e.rowOffset, e.x + maxLineNumberLength + 1);
   }
@@ -330,9 +347,9 @@ void refreshScreen(Editor &e)
     for (int i = 0; i < e.maxX; i++)
       mvaddstr(e.maxY, i, " ");
 
-    attron(COLOR_PAIR(GREEN) | A_BOLD);
+    attron(MESSAGE);
     mvaddstr(e.maxY, 0, e.chord.c_str());
-    attroff(COLOR_PAIR(GREEN) | A_BOLD);
+    attroff(MESSAGE);
   }
 
   refresh();
@@ -396,6 +413,7 @@ int main(int argc, char **argv)
     bool shouldRefresh = true;
 
     int ch = getch();
+    int ch2;
 
     if (e.isChord)
     {
@@ -569,9 +587,6 @@ int main(int argc, char **argv)
         e.chord = "";
         e.isChord = false;
       }
-
-      if (ch != ERR && isprint(ch))
-        e.chord += ch;
       else if (ch == KEY_BACKSPACE || ch == 127)
       {
         if (e.chord.size() > 1)
@@ -581,6 +596,10 @@ int main(int argc, char **argv)
           e.chord = "";
           e.isChord = false;
         }
+      }
+      else if (ch != ERR && isprint(ch))
+      {
+        e.chord += ch;
       }
 
       refreshScreen(e);
@@ -717,8 +736,31 @@ int main(int argc, char **argv)
       break;
 
     case 27:
-      e.inCmdMode = true;
-      e.message = "";
+      ch2 = getch();
+
+      switch (ch2)
+      {
+      case ERR:
+        e.inCmdMode = true;
+        e.message = "";
+        break;
+      case 'a':
+        e.y = e.rowOffset;
+        e.x = 0;
+        e.rowOffset = std::max(0, e.y - getmaxy(stdscr) / 2);
+        break;
+      case 'd':
+        e.y = std::min(e.rowOffset + getmaxy(stdscr) - 1, (int)e.lines.size() - 1);
+        e.x = 0;
+        e.rowOffset = std::max(0, e.y - getmaxy(stdscr) / 2);
+        break;
+      case 'b':
+        e.x = 0;
+        break;
+      case 'c':
+        e.x = e.lines[e.y].size();
+      }
+
       break;
 
     case ':':
