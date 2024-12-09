@@ -30,7 +30,7 @@ enum Highlights
   NUMBER = COLOR_PAIR(MAGENTA),
   COMMENT = COLOR_PAIR(CYAN),
   BRACKET_LEVEL_1 = COLOR_PAIR(RED),
-  BRACKET_LEVEL_2 = COLOR_PAIR(BLUE),
+  BRACKET_LEVEL_2 = COLOR_PAIR(YELLOW),
   BRACKET_LEVEL_3 = COLOR_PAIR(GREEN),
   FIND = COLOR_PAIR(CYAN_BACK)
 };
@@ -209,6 +209,27 @@ void refreshScreen(Editor &e)
 
             if (e.lines[i].substr(0, 8) == "#include")
               highlights.push_back({i, 8, (int)e.lines[i].size() - 8, STRING});
+            else if (e.lines[i].substr(0, 7) != "#define")
+            {
+              int lineStart = lineWithoutStrings.find_first_not_of(" \t");
+
+              if (lineStart != std::string::npos)
+              {
+                int directiveArgsStart = lineWithoutStrings.find_first_of(" \t", lineStart);
+
+                if (directiveArgsStart != std::string::npos)
+                {
+                  int directiveArgsEnd = lineWithoutStrings.find_first_of(" \t", directiveArgsStart + 1);
+
+                  if (directiveArgsEnd == std::string::npos)
+                    directiveArgsEnd = lineWithoutStrings.size();
+
+                  highlights.push_back({i, directiveArgsStart + 1, directiveArgsEnd - directiveArgsStart - 1, KEYWORD});
+                }
+              }
+            }
+
+            lineWithoutStrings = "";
           }
           else
           {
@@ -221,7 +242,7 @@ void refreshScreen(Editor &e)
               if (angleBracketEnd == std::string::npos)
                 break;
 
-              highlights.push_back({i, angleBracketStart, angleBracketEnd - angleBracketStart + 1, KEYWORD});
+              highlights.push_back({i, angleBracketStart + 1, angleBracketEnd - angleBracketStart - 1, KEYWORD});
 
               angleBracketStart = lineWithoutStrings.find("<", angleBracketEnd + 1);
             }
@@ -403,7 +424,7 @@ int main(int argc, char **argv)
     return 1;
   }
 
-  set_escdelay(25);
+  set_escdelay(0);
   initscr();
   keypad(stdscr, TRUE);
   noecho();
@@ -457,7 +478,7 @@ int main(int argc, char **argv)
         }
         else if (e.chord.substr(0, 2) == "l ")
         {
-          std::string lineNumberString = e.chord.substr(2, e.chord.size() - 2);
+          std::string lineNumberString = e.chord.substr(2);
 
           if (lineNumberString.size() == 0 || lineNumberString.find_first_not_of(" 0123456789") != std::string::npos)
             lineNumberString = "1";
@@ -468,7 +489,9 @@ int main(int argc, char **argv)
           {
             e.y = lineNumber - 1;
             e.x = 0;
-            e.rowOffset = std::max(0, e.y - getmaxy(stdscr) / 2);
+
+            if (e.y < e.rowOffset || e.y >= e.rowOffset + getmaxy(stdscr))
+              e.rowOffset = std::max(0, e.y - getmaxy(stdscr) / 2);
           }
         }
         else if (e.chord.substr(0, 2) == "f ")
@@ -754,31 +777,8 @@ int main(int argc, char **argv)
       break;
 
     case 27:
-      ch2 = getch();
-
-      switch (ch2)
-      {
-      case ERR:
-        e.inCmdMode = true;
-        e.message = "";
-        break;
-      case 'a':
-        e.y = e.rowOffset;
-        e.x = 0;
-        e.rowOffset = std::max(0, e.y - getmaxy(stdscr) / 2);
-        break;
-      case 'd':
-        e.y = std::min(e.rowOffset + getmaxy(stdscr) - 1, (int)e.lines.size() - 1);
-        e.x = 0;
-        e.rowOffset = std::max(0, e.y - getmaxy(stdscr) / 2);
-        break;
-      case 'b':
-        e.x = 0;
-        break;
-      case 'c':
-        e.x = e.lines[e.y].size();
-      }
-
+      e.inCmdMode = true;
+      e.message = "";
       break;
 
     case ':':
