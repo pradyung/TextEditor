@@ -7,6 +7,7 @@
 #include <iostream>
 
 #define cut(str, position) str.substr(std::min((int)str.size(), e.colOffset), e.maxX - maxLineNumberLength - 1 - position).c_str()
+#define DEFAULT_BLACK -1
 
 enum Colors
 {
@@ -432,15 +433,16 @@ int main(int argc, char **argv)
   noecho();
   raw();
   start_color();
+  use_default_colors();
 
-  init_pair(WHITE, COLOR_WHITE, COLOR_BLACK);
-  init_pair(CYAN, COLOR_CYAN, COLOR_BLACK);
-  init_pair(RED, COLOR_RED, COLOR_BLACK);
-  init_pair(GREEN, COLOR_GREEN, COLOR_BLACK);
-  init_pair(YELLOW, COLOR_YELLOW, COLOR_BLACK);
-  init_pair(BLUE, COLOR_BLUE, COLOR_BLACK);
-  init_pair(MAGENTA, COLOR_MAGENTA, COLOR_BLACK);
-  init_pair(CYAN_BACK, COLOR_BLACK, COLOR_CYAN);
+  init_pair(WHITE, COLOR_WHITE, DEFAULT_BLACK);
+  init_pair(CYAN, COLOR_CYAN, DEFAULT_BLACK);
+  init_pair(RED, COLOR_RED, DEFAULT_BLACK);
+  init_pair(GREEN, COLOR_GREEN, DEFAULT_BLACK);
+  init_pair(YELLOW, COLOR_YELLOW, DEFAULT_BLACK);
+  init_pair(BLUE, COLOR_BLUE, DEFAULT_BLACK);
+  init_pair(MAGENTA, COLOR_MAGENTA, DEFAULT_BLACK);
+  init_pair(CYAN_BACK, DEFAULT_BLACK, COLOR_CYAN);
 
   refreshScreen(e);
 
@@ -528,7 +530,7 @@ int main(int argc, char **argv)
               e.x = positionx;
               e.snapX = e.x;
 
-              if (e.y < e.rowOffset || e.y >= e.rowOffset + getmaxy(stdscr))
+              if (e.y < e.rowOffset || e.y > e.rowOffset + getmaxy(stdscr))
                 e.rowOffset = std::max(0, e.y - getmaxy(stdscr) / 2);
 
               e.isFindHighlight = true;
