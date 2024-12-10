@@ -53,6 +53,8 @@ struct Editor
   std::vector<std::string> lines = {""};
   int x = 0, y = 0, maxY = 0, maxX = 0, rowOffset = 0, colOffset = 0;
 
+  int snapX = 0;
+
   bool isChord = false;
   std::string chord = "";
 
@@ -480,7 +482,9 @@ int main(int argc, char **argv)
         {
           std::string lineNumberString = e.chord.substr(2);
 
-          if (lineNumberString.size() == 0 || lineNumberString.find_first_not_of(" 0123456789") != std::string::npos)
+          if (lineNumberString == "e")
+            lineNumberString = std::to_string(e.lines.size());
+          else if (lineNumberString.size() == 0 || lineNumberString.find_first_not_of(" 0123456789") != std::string::npos || lineNumberString == "0")
             lineNumberString = "1";
 
           int lineNumber = std::min(std::stoi(lineNumberString), (int)e.lines.size());
@@ -489,6 +493,7 @@ int main(int argc, char **argv)
           {
             e.y = lineNumber - 1;
             e.x = 0;
+            e.snapX = e.x;
 
             if (e.y < e.rowOffset || e.y >= e.rowOffset + getmaxy(stdscr))
               e.rowOffset = std::max(0, e.y - getmaxy(stdscr) / 2);
@@ -521,6 +526,7 @@ int main(int argc, char **argv)
             {
               e.y = lineNumber - 1;
               e.x = positionx;
+              e.snapX = e.x;
 
               if (e.y < e.rowOffset || e.y >= e.rowOffset + getmaxy(stdscr))
                 e.rowOffset = std::max(0, e.y - getmaxy(stdscr) / 2);
@@ -563,6 +569,7 @@ int main(int argc, char **argv)
 
               e.y = 0;
               e.x = 0;
+              e.snapX = e.x;
               e.rowOffset = 0;
               e.colOffset = 0;
             }
@@ -612,6 +619,7 @@ int main(int argc, char **argv)
 
             e.y = 0;
             e.x = 0;
+            e.snapX = e.x;
             e.rowOffset = 0;
             e.colOffset = 0;
           }
@@ -660,8 +668,14 @@ int main(int argc, char **argv)
           shouldRefresh = true;
         }
 
-        e.x = std::min(e.x, (int)e.lines[e.y].size());
+        e.x = std::min(e.snapX, (int)e.lines[e.y].size());
       }
+      else if (e.x > 0)
+      {
+        e.x = 0;
+      }
+      else
+        e.snapX = e.x;
       break;
 
     case KEY_DOWN:
@@ -677,8 +691,14 @@ int main(int argc, char **argv)
           shouldRefresh = true;
         }
 
-        e.x = std::min(e.x, (int)e.lines[e.y].size());
+        e.x = std::min(e.snapX, (int)e.lines[e.y].size());
       }
+      else if (e.x < e.lines[e.y].size())
+      {
+        e.x = e.lines[e.y].size();
+      }
+      else
+        e.snapX = e.x;
       break;
 
     case KEY_LEFT:
@@ -697,6 +717,7 @@ int main(int argc, char **argv)
         }
         e.x = e.lines[e.y].size();
       }
+      e.snapX = e.x;
       break;
 
     case KEY_RIGHT:
@@ -719,6 +740,7 @@ int main(int argc, char **argv)
 
         e.x = 0;
       }
+      e.snapX = e.x;
       break;
 
     case 127:
@@ -747,6 +769,8 @@ int main(int argc, char **argv)
         e.unSavedChanges = true;
       }
 
+      e.snapX = e.x;
+
       break;
 
     case '\n':
@@ -764,6 +788,7 @@ int main(int argc, char **argv)
         e.rowOffset++;
 
       e.x = 0;
+      e.snapX = e.x;
       break;
 
     case '\t':
@@ -774,6 +799,7 @@ int main(int argc, char **argv)
 
       e.lines[e.y].insert(e.x, 4, ' ');
       e.x += 4;
+      e.snapX = e.x;
       break;
 
     case 27:
@@ -781,31 +807,85 @@ int main(int argc, char **argv)
       e.message = "";
       break;
 
-    case ':':
-    case ';':
-      if (e.inCmdMode)
-      {
-        e.isChord = true;
-        e.chord = ch;
-        break;
-      }
-
-    case 'i':
-      if (e.inCmdMode)
-      {
-        e.inCmdMode = false;
-        e.message = "INSERT - PRESS ESC TO EXIT";
-        break;
-      }
-
     default:
       if (e.inCmdMode)
+      {
+        switch (ch)
+        {
+        case ':':
+        case ';':
+          e.isChord = true;
+          e.chord = ch;
+          break;
+
+        case 'i':
+          e.inCmdMode = false;
+          e.message = "INSERT - PRESS ESC TO EXIT";
+          break;
+
+        case 'w':
+          shouldRefresh = false;
+          if (e.y > 0)
+          {
+            e.y--;
+            if (e.y < e.rowOffset)
+            {
+              e.rowOffset--;
+              shouldRefresh = true;
+            }
+
+            e.x = std::min(e.snapX, (int)e.lines[e.y].size());
+          }
+          else if (e.x > 0)
+          {
+            e.x = 0;
+          }
+          else
+            e.snapX = e.x;
+          break;
+
+        case 's':
+          shouldRefresh = false;
+          if (e.y < e.lines.size() - 1)
+          {
+            e.maxY = getmaxy(stdscr) + e.rowOffset - 1;
+
+            e.y++;
+            if (e.y >= e.maxY)
+            {
+              e.rowOffset++;
+              shouldRefresh = true;
+            }
+
+            e.x = std::min(e.snapX, (int)e.lines[e.y].size());
+          }
+          else if (e.x < e.lines[e.y].size())
+          {
+            e.x = e.lines[e.y].size();
+          }
+          else
+            e.snapX = e.x;
+          break;
+
+        case 'a':
+          e.x = 0;
+          e.snapX = e.x;
+          break;
+
+        case 'd':
+          e.x = e.lines[e.y].size();
+          e.snapX = e.x;
+          break;
+        }
+
         break;
+      }
 
       if (ch != ERR && isprint(ch))
       {
         e.lines[e.y].insert(e.x, 1, ch);
         e.x++;
+        e.snapX = e.x;
 
         e.unSavedChanges = true;
       }
