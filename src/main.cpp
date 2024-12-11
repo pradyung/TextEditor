@@ -212,22 +212,47 @@ void refreshScreen(Editor &e)
 
             if (e.lines[i].substr(0, 8) == "#include")
               highlights.push_back({i, 8, (int)e.lines[i].size() - 8, STRING});
-            else if (e.lines[i].substr(0, 7) != "#define")
+            else
             {
               int lineStart = lineWithoutStrings.find_first_not_of(" \t");
 
+              int directiveArgsStart = -1, directiveArgsEnd = -1;
+
               if (lineStart != std::string::npos)
               {
-                int directiveArgsStart = lineWithoutStrings.find_first_of(" \t", lineStart);
+                directiveArgsStart = lineWithoutStrings.find_first_of(" \t", lineStart);
 
                 if (directiveArgsStart != std::string::npos)
                 {
-                  int directiveArgsEnd = lineWithoutStrings.find_first_of(" \t", directiveArgsStart + 1);
+                  directiveArgsEnd = lineWithoutStrings.find_first_of(" \t", directiveArgsStart + 1);
 
                   if (directiveArgsEnd == std::string::npos)
                     directiveArgsEnd = lineWithoutStrings.size();
 
                   highlights.push_back({i, directiveArgsStart + 1, directiveArgsEnd - directiveArgsStart - 1, KEYWORD});
+                }
+              }
+
+              if (e.lines[i].substr(0, 7) == "#define" && directiveArgsStart != -1)
+              {
+                int numberStart = lineWithoutStrings.find_first_of("0123456789", directiveArgsStart);
+
+                while (numberStart != std::string::npos)
+                {
+                  int numberEnd = lineWithoutStrings.find_first_not_of("0123456789", numberStart);
+
+                  bool isNumber = true;
+
+                  if (numberStart != 0 && isalnum(lineWithoutStrings[numberStart - 1]))
+                    isNumber = false;
+
+                  if (numberEnd != std::string::npos && isalnum(lineWithoutStrings[numberEnd]))
+                    isNumber = false;
+
+                  if (isNumber)
+                    highlights.push_back({i, numberStart, numberEnd - numberStart, NUMBER});
+
+                  numberStart = lineWithoutStrings.find_first_of("0123456789", numberEnd);
                 }
               }
             }
@@ -311,7 +336,7 @@ void refreshScreen(Editor &e)
       }
     }
 
-    clear();
+    erase();
 
     for (int i = 0; i < e.maxY; i++)
     {
