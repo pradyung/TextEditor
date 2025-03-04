@@ -206,12 +206,12 @@ void refreshScreen(Editor &e)
             lineWithoutStrings = lineWithoutStrings.substr(0, commentStart);
           }
 
-          if (e.lines[i][0] == '#')
+          if (lineWithoutStrings[0] == '#')
           {
-            highlights.push_back({i, 0, (int)e.lines[i].size(), DIRECTIVE});
+            highlights.push_back({i, 0, (int)lineWithoutStrings.size(), DIRECTIVE});
 
-            if (e.lines[i].substr(0, 8) == "#include")
-              highlights.push_back({i, 8, (int)e.lines[i].size() - 8, STRING});
+            if (lineWithoutStrings.substr(0, 8) == "#include")
+              highlights.push_back({i, 8, (int)lineWithoutStrings.size() - 8, STRING});
             else
             {
               int lineStart = lineWithoutStrings.find_first_not_of(" \t");
@@ -233,7 +233,7 @@ void refreshScreen(Editor &e)
                 }
               }
 
-              if (e.lines[i].substr(0, 7) == "#define" && directiveArgsStart != -1)
+              if (lineWithoutStrings.substr(0, 7) == "#define" && directiveArgsStart != -1)
               {
                 int numberStart = lineWithoutStrings.find_first_of("0123456789", directiveArgsStart);
 
@@ -256,8 +256,6 @@ void refreshScreen(Editor &e)
                 }
               }
             }
-
-            lineWithoutStrings = "";
           }
           else
           {
@@ -486,6 +484,18 @@ int main(int argc, char **argv)
 
         if (e.chord == "q")
         {
+          if (e.unSavedChanges)
+          {
+            e.message = "UNSAVED CHANGES - :q! TO QUIT";
+          }
+          else
+          {
+            endwin();
+            return 0;
+          }
+        }
+        else if (e.chord == "q!")
+        {
           endwin();
           return 0;
         }
@@ -505,9 +515,9 @@ int main(int argc, char **argv)
           e.inCmdMode = false;
           e.message = "INSERT - PRESS ESC TO EXIT";
         }
-        else if (e.chord.substr(0, 2) == "l ")
+        else if (e.chord.substr(0, 2) == "l " || e.chord.substr(0, 2) == "l")
         {
-          std::string lineNumberString = e.chord.substr(2);
+          std::string lineNumberString = e.chord.length() > 2 ? e.chord.substr(2) : "1";
 
           if (lineNumberString == "e")
             lineNumberString = std::to_string(e.lines.size());
